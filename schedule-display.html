@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>수업 가능 시간</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            padding: 20px;
+            background: transparent;
+        }
+        
+        #schedule-container {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            color: white;
+        }
+        
+        .loading {
+            text-align: center;
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.9);
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .error {
+            background: #f44336;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        #schedule-content {
+            display: none;
+        }
+        
+        .schedule-header {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .schedule-text {
+            font-size: 16px;
+            line-height: 1.6;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 8px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .icon {
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div id="schedule-container">
+        <p id="message" class="loading">⏳ 수업 가능 시간을 불러오는 중...</p>
+        
+        <div id="schedule-content">
+            <div class="schedule-header">
+                <span class="icon">📅</span>
+                <span>수업 가능 시간</span>
+            </div>
+            <div class="schedule-text" id="schedule-text"></div>
+        </div>
+    </div>
+
+    <script>
+        // Google Apps Script Web App URL - 여기에 배포 후 받은 URL을 넣으세요
+        const SCRIPT_URL = 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE';
+        
+        function getUrlParameter(name) {
+            // 현재 페이지의 URL에서 파라미터 가져오기
+            const urlParams = new URLSearchParams(window.location.search);
+            const param = urlParams.get(name);
+            if (param) return param;
+            
+            // iframe 내부일 경우 부모 창의 URL 확인 시도
+            try {
+                if (window.parent && window.parent !== window) {
+                    const parentUrl = new URLSearchParams(window.parent.location.search);
+                    return parentUrl.get(name);
+                }
+            } catch (e) {
+                // Cross-origin 에러 무시
+                console.log('부모 창 URL 접근 불가 (정상)');
+            }
+            
+            // referrer에서 확인 시도
+            if (document.referrer) {
+                try {
+                    const referrerUrl = new URL(document.referrer);
+                    const referrerParams = new URLSearchParams(referrerUrl.search);
+                    return referrerParams.get(name);
+                } catch (e) {
+                    console.log('Referrer URL 파싱 실패');
+                }
+            }
+            
+            return null;
+        }
+        
+        async function loadSchedule() {
+            const userId = getUrlParameter('id');
+            const message = document.getElementById('message');
+            const content = document.getElementById('schedule-content');
+            const scheduleText = document.getElementById('schedule-text');
+            
+            console.log('URL 파라미터 ID:', userId);
+            
+            if (!userId) {
+                message.textContent = '❌ ID가 제공되지 않았습니다.';
+                message.className = 'error';
+                return;
+            }
+            
+            try {
+                const url = `${SCRIPT_URL}?id=${encodeURIComponent(userId)}`;
+                console.log('요청 URL:', url);
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                console.log('응답 데이터:', data);
+                
+                if (data.success) {
+                    scheduleText.textContent = data.schedule;
+                    message.style.display = 'none';
+                    content.style.display = 'block';
+                } else {
+                    message.textContent = `❌ ${data.message || '정보를 찾을 수 없습니다.'}`;
+                    message.className = 'error';
+                }
+            } catch (error) {
+                console.error('오류:', error);
+                message.textContent = '❌ 데이터를 불러오는 중 오류가 발생했습니다.';
+                message.className = 'error';
+            }
+        }
+        
+        // 페이지 로드 시 실행
+        loadSchedule();
+    </script>
+</body>
+</html>
