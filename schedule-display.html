@@ -70,6 +70,16 @@
         .icon {
             font-size: 24px;
         }
+        
+        .debug-info {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -83,83 +93,166 @@
             </div>
             <div class="schedule-text" id="schedule-text"></div>
         </div>
+        
+        <div id="debug-info" class="debug-info"></div>
     </div>
 
     <script>
         // Google Apps Script Web App URL - 여기에 배포 후 받은 URL을 넣으세요
         const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxlvPGeZLbUY4hPlU5gjgl97Te6QeF-L3aj6yi8fHC-UjfkmmXxNNv9TCrhjKcIHrRnpg/exec';
         
+        // 디버그 모드 (테스트 시에만 true로 설정)
+        const DEBUG_MODE = true;
+        
+        function debugLog(message) {
+            if (DEBUG_MODE) {
+                console.log(message);
+                const debugDiv = document.getElementById('debug-info');
+                debugDiv.style.display = 'block';
+                debugDiv.innerHTML += message + '<br>';
+            }
+        }
+        
         function getUrlParameter(name) {
-            // 현재 페이지의 URL에서 파라미터 가져오기
+            debugLog('=== URL 파라미터 찾기 시작 ===');
+            
+            // 1. 현재 페이지의 URL에서 파라미터 가져오기
+            const currentUrl = window.location.href;
+            debugLog('현재 URL: ' + currentUrl);
+            
             const urlParams = new URLSearchParams(window.location.search);
             const param = urlParams.get(name);
-            if (param) return param;
-            
-            // iframe 내부일 경우 부모 창의 URL 확인 시도
-            try {
-                if (window.parent && window.parent !== window) {
-                    const parentUrl = new URLSearchParams(window.parent.location.search);
-                    return parentUrl.get(name);
-                }
-            } catch (e) {
-                // Cross-origin 에러 무시
-                console.log('부모 창 URL 접근 불가 (정상)');
+            if (param) {
+                debugLog('✅ 현재 페이지 파라미터에서 발견: ' + param);
+                return param;
             }
             
-            // referrer에서 확인 시도
+            // 2. URL hash에서 가져오기 시도 (#?id=123456 형식)
+            if (window.location.hash) {
+                debugLog('Hash 확인: ' + window.location.hash);
+                const hashParams = new URLSearchParams(window.location.hash.substring(1));
+                const hashParam = hashParams.get(name);
+                if (hashParam) {
+                    debugLog('✅ Hash에서 발견: ' + hashParam);
+                    return hashParam;
+                }
+            }
+            
+            // 3. referrer에서 확인 시도
             if (document.referrer) {
+                debugLog('Referrer 확인: ' + document.referrer);
                 try {
                     const referrerUrl = new URL(document.referrer);
                     const referrerParams = new URLSearchParams(referrerUrl.search);
-                    return referrerParams.get(name);
+                    const referrerParam = referrerParams.get(name);
+                    if (referrerParam) {
+                        debugLog('✅ Referrer에서 발견: ' + referrerParam);
+                        return referrerParam;
+                    }
                 } catch (e) {
-                    console.log('Referrer URL 파싱 실패');
+                    debugLog('Referrer URL 파싱 실패: ' + e.message);
                 }
             }
             
+            debugLog('❌ 파라미터를 찾을 수 없음');
             return null;
         }
         
-        async function loadSchedule() {
-            const userId = getUrlParameter('id');
+        async function loadScheduleWithId(userId) {
             const message = document.getElementById('message');
             const content = document.getElementById('schedule-content');
             const scheduleText = document.getElementById('schedule-text');
             
-            console.log('URL 파라미터 ID:', userId);
+            debugLog('=== 스케줄 로딩 시작 ===');
+            debugLog('사용자 ID: ' + userId);
             
             if (!userId) {
                 message.textContent = '❌ ID가 제공되지 않았습니다.';
                 message.className = 'error';
+                debugLog('❌ ID가 없어서 중단');
+                return;
+            }
+            
+            // Script URL 확인
+            if (SCRIPT_URL === 'YOUR_GOOGLE_APPS_SCRIPT_URL_HERE') {
+                message.textContent = '❌ Google Apps Script URL이 설정되지 않았습니다.';
+                message.className = 'error';
+                debugLog('❌ Script URL이 설정되지 않음');
                 return;
             }
             
             try {
                 const url = `${SCRIPT_URL}?id=${encodeURIComponent(userId)}`;
-                console.log('요청 URL:', url);
+                debugLog('요청 URL: ' + url);
+                
+                message.textContent = '⏳ 데이터를 불러오는 중...';
                 
                 const response = await fetch(url);
-                const data = await response.json();
+                debugLog('응답 상태: ' + response.status);
                 
-                console.log('응답 데이터:', data);
+                const data = await response.json();
+                debugLog('응답 데이터: ' + JSON.stringify(data));
                 
                 if (data.success) {
                     scheduleText.textContent = data.schedule;
                     message.style.display = 'none';
                     content.style.display = 'block';
+                    debugLog('✅ 성공적으로 로드됨');
                 } else {
                     message.textContent = `❌ ${data.message || '정보를 찾을 수 없습니다.'}`;
                     message.className = 'error';
+                    debugLog('❌ 데이터 로드 실패: ' + data.message);
                 }
             } catch (error) {
                 console.error('오류:', error);
                 message.textContent = '❌ 데이터를 불러오는 중 오류가 발생했습니다.';
                 message.className = 'error';
+                debugLog('❌ Fetch 오류: ' + error.message);
             }
         }
         
+        async function loadSchedule() {
+            debugLog('=== 페이지 로드 시작 ===');
+            
+            const userId = getUrlParameter('id');
+            if (userId) {
+                await loadScheduleWithId(userId);
+            } else {
+                // 1초 후 다시 시도 (iframe 로딩 지연 대응)
+                debugLog('ID를 찾지 못함, 1초 후 재시도...');
+                setTimeout(() => {
+                    const retryUserId = getUrlParameter('id');
+                    if (retryUserId) {
+                        debugLog('재시도에서 ID 발견: ' + retryUserId);
+                        loadScheduleWithId(retryUserId);
+                    } else {
+                        document.getElementById('message').textContent = '❌ URL에 id 파라미터가 필요합니다. 예: ?id=123456';
+                        document.getElementById('message').className = 'error';
+                    }
+                }, 1000);
+            }
+        }
+        
+        // postMessage 수신 (부모 창에서 파라미터를 전달받는 경우)
+        window.addEventListener('message', function(event) {
+            debugLog('postMessage 수신: ' + JSON.stringify(event.data));
+            if (event.data && event.data.type === 'URL_PARAMS' && event.data.id) {
+                loadScheduleWithId(event.data.id);
+            }
+        });
+        
         // 페이지 로드 시 실행
-        loadSchedule();
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', loadSchedule);
+        } else {
+            loadSchedule();
+        }
+        
+        // 부모 창에 파라미터 요청
+        if (window.parent !== window) {
+            debugLog('iframe 내부에서 실행 중, 부모에게 파라미터 요청');
+            window.parent.postMessage({ type: 'REQUEST_PARAMS' }, '*');
+        }
     </script>
 </body>
 </html>
